@@ -31,9 +31,14 @@ function parseAnyDateToIso(dateInput) {
         return `${y}-${m}-${d}`;
     }
 
+    let s = String(dateInput).trim();
+    // 🔒 Strip leading/trailing single quotes, backticks, unicode quotes, double quotes, and spaces
+    s = s.replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
+    if (!s) return null;
+
     // Handle Excel serial date numbers (e.g. 45488 -> 2024-07-15)
-    const num = Number(dateInput);
-    if (!isNaN(num) && num > 20000 && num < 300000 && !String(dateInput).includes('-') && !String(dateInput).includes('/')) {
+    const num = Number(s);
+    if (!isNaN(num) && num > 20000 && num < 300000 && !s.includes('-') && !s.includes('/')) {
         const dateObj = new Date(Math.round((num - 25569) * 86400 * 1000));
         if (!isNaN(dateObj.getTime())) {
             let y = dateObj.getFullYear();
@@ -44,9 +49,6 @@ function parseAnyDateToIso(dateInput) {
         }
     }
 
-    let s = String(dateInput).trim();
-    if (!s) return null;
-
     // Convert Thai numerals to Arabic numerals
     s = s.replace(/[๐-๙]/g, match => THAI_NUMERALS[match]);
 
@@ -56,6 +58,8 @@ function parseAnyDateToIso(dateInput) {
     } else if (s.includes(' ') && (s.includes(':') || s.match(/\d{1,2}:\d{1,2}/))) {
         s = s.split(' ')[0].trim();
     }
+
+    s = s.replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
 
     // 1. YYYY-MM-DD or YYYY/MM/DD (4 digits first)
     const ymdMatch = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
@@ -176,7 +180,8 @@ function formatDateTH(dateInput) {
     if (!dateInput) return '';
     const iso = parseAnyDateToIso(dateInput);
     if (!iso) {
-        const s = String(dateInput).trim();
+        let s = String(dateInput).trim().replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
+        s = s.replace(/[๐-๙]/g, match => THAI_NUMERALS[match] || match);
         const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
         if (dmy) {
             const day = dmy[1].padStart(2, '0');

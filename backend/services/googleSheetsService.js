@@ -18,6 +18,15 @@ if (GOOGLE_REFRESH_TOKEN) {
   });
 }
 
+// 🔒 ฟังก์ชันแปลงข้อความทั่วไปสำหรับเซลล์ใน Google Sheets (รักษาข้อความและเครื่องหมายคำพูดในเนื้อหาไว้ตามปกติ)
+const cleanCellText = (val) => {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'number') return isNaN(val) ? '' : val;
+  if (typeof val === 'boolean') return val;
+  if (val instanceof Date) return formatDateTH(val);
+  return String(val).trim();
+};
+
 const cleanToOnlyName = (str) => {
   if (!str || typeof str !== 'string') return '';
   return str.split(',').map(item => {
@@ -32,7 +41,8 @@ const getSheetName = (yearAD) => {
   if (!yearAD) {
       return `${new Date().getFullYear() + 543}`;
   }
-  const year = parseInt(yearAD, 10);
+  const cleanYear = String(yearAD).replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
+  const year = parseInt(cleanYear, 10);
   return year > 2500 ? `${year}` : `${year + 543}`;
 };
 
@@ -55,7 +65,7 @@ async function ensureSheetExists(sheets, spreadsheetId, sheetName) {
           await sheets.spreadsheets.values.append({
               spreadsheetId,
               range: `${sheetName}!A1:T1`,
-              valueInputOption: 'RAW',
+              valueInputOption: 'USER_ENTERED',
               resource: { values: [headers] }
           });
           console.log(`[Google Sheets] Added headers to new sheet: ${sheetName}`);
@@ -71,7 +81,7 @@ async function ensureSheetExists(sheets, spreadsheetId, sheetName) {
                   await sheets.spreadsheets.values.update({
                       spreadsheetId,
                       range: `${sheetName}!A1:T1`,
-                      valueInputOption: 'RAW',
+                      valueInputOption: 'USER_ENTERED',
                       resource: { values: [headers] }
                   });
                   console.log(`[Google Sheets] Auto-updated header for sheet ${sheetName} to 20 columns.`);
@@ -87,7 +97,7 @@ async function ensureSheetExists(sheets, spreadsheetId, sheetName) {
 
 const normalizeDateString = (str) => {
   if (!str) return '';
-  let s = String(str).trim();
+  let s = String(str).replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
   if (!s) return '';
 
   if (s.includes('T')) {
@@ -128,31 +138,33 @@ const normalizeDateString = (str) => {
 
 const normalizeReceiveNo = (noInput) => {
   if (noInput === null || noInput === undefined || noInput === '') return '';
-  const num = parseInt(String(noInput).replace(/[๐-๙]/g, d => '0123456789'['๐๑๒๓๔๕๖๗๘๙'.indexOf(d)]), 10);
-  return isNaN(num) ? String(noInput).trim() : num;
+  let s = String(noInput).replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
+  const num = parseInt(s.replace(/[๐-๙]/g, d => '0123456789'['๐๑๒๓๔๕๖๗๘๙'.indexOf(d)]), 10);
+  return isNaN(num) ? s : num;
 };
 
 const normalizeYear = (yearInput) => {
   if (!yearInput) return '';
-  const num = parseInt(String(yearInput).replace(/[๐-๙]/g, d => '0123456789'['๐๑๒๓๔๕๖๗๘๙'.indexOf(d)]), 10);
-  if (isNaN(num)) return String(yearInput).trim();
+  let s = String(yearInput).replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
+  const num = parseInt(s.replace(/[๐-๙]/g, d => '0123456789'['๐๑๒๓๔๕๖๗๘๙'.indexOf(d)]), 10);
+  if (isNaN(num)) return s;
   return num < 2500 ? (num + 543) : num;
 };
 
 const isMatchingRow = (row, taskData) => {
   if (!row || row.length === 0) return false;
 
-  const rowId = row[0] ? String(row[0]).trim() : '';
-  const rowReceiveNo = row[1] ? String(row[1]).trim() : '';
-  const rowReceiveYear = normalizeYear(row[2]);
-  const rowReceivedDate = row[3] ? String(row[3]).trim() : '';
-  const rowMemoNo = row[4] ? String(row[4]).trim() : '';
+  const rowId = row[0] ? cleanCellText(row[0]) : '';
+  const rowReceiveNo = row[1] ? String(normalizeReceiveNo(row[1])) : '';
+  const rowReceiveYear = String(normalizeYear(row[2]));
+  const rowReceivedDate = row[3] ? cleanCellText(row[3]) : '';
+  const rowMemoNo = row[4] ? cleanCellText(row[4]) : '';
 
-  const targetId = taskData.id ? String(taskData.id).trim() : '';
-  const targetReceiveNo = taskData.receive_no ? String(taskData.receive_no).trim() : '';
-  const targetReceiveYear = normalizeYear(taskData.receive_year);
+  const targetId = taskData.id ? cleanCellText(taskData.id) : '';
+  const targetReceiveNo = taskData.receive_no ? String(normalizeReceiveNo(taskData.receive_no)) : '';
+  const targetReceiveYear = String(normalizeYear(taskData.receive_year));
   const targetReceivedDate = taskData.created_at || taskData.received_date || '';
-  const targetMemoNo = taskData.memo_no ? String(taskData.memo_no).trim() : '';
+  const targetMemoNo = taskData.memo_no ? cleanCellText(taskData.memo_no) : '';
 
   // 1. Strict ID match first (If both IDs exist, they MUST match exactly)
   if (targetId && rowId) {
@@ -206,26 +218,26 @@ const isMatchingRow = (row, taskData) => {
 };
 
 const buildRowData = (taskData) => [
-  taskData.id || '',
+  cleanCellText(taskData.id),
   normalizeReceiveNo(taskData.receive_no),
   normalizeYear(taskData.receive_year),
   formatDateTH(taskData.created_at || taskData.received_date) || '',
-  taskData.memo_no || '',
+  cleanCellText(taskData.memo_no),
   formatDateTH(taskData.memo_date) || '',
-  taskData.sender || '',
-  taskData.recipient_to || '',
-  taskData.title || '',
+  cleanCellText(taskData.sender),
+  cleanCellText(taskData.recipient_to),
+  cleanCellText(taskData.title),
   cleanToOnlyName(taskData.personInCharge) || '',
   formatDateTH(taskData.due_date) || '',
-  taskData.task_detail || '',
+  cleanCellText(taskData.task_detail),
   formatDateTH(taskData.sign_date) || '',
   formatDateTH(taskData.meeting_date) || '',
   formatDateTH(taskData.reply_due_date) || '',
-  taskData.notes || '',
-  taskData.additional_docs || '',
-  taskData.urgency_level || 'ปกติ',
-  taskData.secret_level || 'ปกติ',
-  taskData.document_link || taskData.drive_web_view_link || ''
+  cleanCellText(taskData.notes),
+  cleanCellText(taskData.additional_docs),
+  cleanCellText(taskData.urgency_level || 'ปกติ'),
+  cleanCellText(taskData.secret_level || 'ปกติ'),
+  cleanCellText(taskData.document_link || taskData.drive_web_view_link)
 ];
 
 // Function to append or update a single task in Google Sheets
@@ -261,7 +273,7 @@ exports.appendTaskToSheet = async (taskData) => {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
         range: `${sheetName}!A${sheetRowNumber}:T${sheetRowNumber}`,
-        valueInputOption: 'RAW',
+        valueInputOption: 'USER_ENTERED',
         resource: {
           values: [rowData],
         },
@@ -272,7 +284,7 @@ exports.appendTaskToSheet = async (taskData) => {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
         range: `${sheetName}!A:T`,
-        valueInputOption: 'RAW',
+        valueInputOption: 'USER_ENTERED',
         resource: {
           values: [rowData],
         },
@@ -334,7 +346,7 @@ exports.appendMultipleTasksToSheet = async (tasksArray) => {
           await sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
             resource: {
-              valueInputOption: 'RAW',
+              valueInputOption: 'USER_ENTERED',
               data: updateData
             }
           });
@@ -344,7 +356,7 @@ exports.appendMultipleTasksToSheet = async (tasksArray) => {
           await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
             range: `${sheetName}!A:T`,
-            valueInputOption: 'RAW',
+            valueInputOption: 'USER_ENTERED',
             resource: { values: rowsToAppend },
           });
         }
@@ -392,7 +404,7 @@ exports.updateTaskInSheet = async (taskData) => {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A${sheetRowNumber}:T${sheetRowNumber}`,
-      valueInputOption: 'RAW',
+      valueInputOption: 'USER_ENTERED',
       resource: {
         values: [rowData],
       },
@@ -491,7 +503,7 @@ exports.clearTaskLinksInSheet = async (taskId, receiveYear, receiveNo = '') => {
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
       resource: {
-        valueInputOption: 'RAW',
+        valueInputOption: 'USER_ENTERED',
         data: [
           { range: `${sheetName}!Q${sheetRowNumber}`, values: [['']] },
           { range: `${sheetName}!T${sheetRowNumber}`, values: [['']] }

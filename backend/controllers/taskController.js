@@ -62,7 +62,8 @@ const parseThaiDateToIso = (dateStr) => {
     return null;
   }
   
-  const trimmed = dateStr.trim();
+  let trimmed = dateStr.trim();
+  trimmed = trimmed.replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
   if (!trimmed) return null;
 
   // Convert Thai numerals to Arabic numerals

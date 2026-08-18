@@ -141,6 +141,15 @@ exports.uploadExcelTasks = async (req, res) => {
             return parseAnyDateToIso(d);
         };
 
+        const sanitizeExcelVal = (val) => {
+            if (val === null || val === undefined) return null;
+            let str = typeof val === 'object' 
+                ? (val.text ? String(val.text) : (val.result ? String(val.result) : String(val)))
+                : String(val);
+            str = str.replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
+            return str === '' ? null : str;
+        };
+
         workbook.SheetNames.forEach(sheetName => {
             const rawData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: null });
             
@@ -152,16 +161,16 @@ exports.uploadExcelTasks = async (req, res) => {
                     const cleanKey = key.trim().replace(/\s+/g, '');
                     if (cleanKey === "เรื่อง" || cleanKey === "ชื่อเรื่อง" || cleanKey === "หัวข้อ" || cleanKey === "เรื่อง/งาน" || cleanKey === "ชื่อเอกสาร" || cleanKey === "title") {
                         if (row[key] !== null && row[key] !== undefined && String(row[key]).trim()) {
-                            subject = String(row[key]).trim();
+                            subject = sanitizeExcelVal(row[key]);
                             break;
                         }
                     }
                 }
 
                 if (!subject) {
-                    if (row["ที่หนังสือ"]) subject = String(row["ที่หนังสือ"]).trim();
-                    else if (row["ข้อสั่งการ"]) subject = String(row["ข้อสั่งการ"]).trim();
-                    else if (row["เรื่อง"]) subject = String(row["เรื่อง"]).trim();
+                    if (row["ที่หนังสือ"]) subject = sanitizeExcelVal(row["ที่หนังสือ"]);
+                    else if (row["ข้อสั่งการ"]) subject = sanitizeExcelVal(row["ข้อสั่งการ"]);
+                    else if (row["เรื่อง"]) subject = sanitizeExcelVal(row["เรื่อง"]);
                 }
                 
                 // ถ้าไม่มีเรื่องหรือข้อมูลงานเลย ให้คัดออก
@@ -170,11 +179,11 @@ exports.uploadExcelTasks = async (req, res) => {
                 // นำเข้าข้อมูลปกติ ไม่ผูกมัดสีแดงกับงานด่วน
                 const isUrgent = false;
 
-                const command = row["ข้อสั่งการ"] ? String(row["ข้อสั่งการ"]).trim() : "";
+                const command = row["ข้อสั่งการ"] ? sanitizeExcelVal(row["ข้อสั่งการ"]) || "" : "";
                 
                 // แยกย่อยข้อสั่งการด้วยการขึ้นบรรทัดใหม่
                 const commandTopics = command 
-                    ? command.split(/\r?\n/).map(c => c.trim()).filter(c => c.length > 0)
+                    ? command.split(/\r?\n/).map(c => sanitizeExcelVal(c)).filter(Boolean)
                     : [];
 
                 // ค้นหาวันที่รับจากคอลัมน์ที่เป็นไปได้
@@ -184,7 +193,7 @@ exports.uploadExcelTasks = async (req, res) => {
                     const cleanKey = key.trim().replace(/\s+/g, '');
                     if (cleanKey === "วันที่รับ" || cleanKey === "วันที่ลงรับ" || cleanKey === "วันรับ" || cleanKey === "ลงรับ" || cleanKey === "created_at" || cleanKey === "วันที่สร้าง") {
                         if (row[key] !== null && row[key] !== undefined && String(row[key]).trim() !== '') {
-                            receivedDateInput = row[key];
+                            receivedDateInput = sanitizeExcelVal(row[key]);
                             break;
                         }
                     }
@@ -194,7 +203,7 @@ exports.uploadExcelTasks = async (req, res) => {
                 // 🔒 ข้อ 1: ถ้าไม่มีวันที่รับ ให้ข้ามแถวนี้ไปเลย (ไม่นำเข้า)
                 if (!receivedDate) return;
 
-                let dueDate = parseDateSafe(row["วันที่"]) || parseDateSafe(row["วันครบกำหนด"]) || parseDateSafe(row["กำหนดส่ง"]);
+                let dueDate = parseDateSafe(sanitizeExcelVal(row["วันที่"])) || parseDateSafe(sanitizeExcelVal(row["วันครบกำหนด"])) || parseDateSafe(sanitizeExcelVal(row["กำหนดส่ง"]));
                 
                 // ค้นหาเลขรับ (Registration Number) จากคอลัมน์ที่เป็นไปได้
                 let receiveNoInput = null;
@@ -203,7 +212,7 @@ exports.uploadExcelTasks = async (req, res) => {
                     const cleanKey = key.trim().replace(/\s+/g, '');
                     if (cleanKey === "เลขทะเบียน" || cleanKey === "ทะเบียนรับ" || cleanKey === "ทะเบียน" || cleanKey === "เลขรับ" || cleanKey === "เลขทะเบียนรับ" || cleanKey === "ที่" || cleanKey === "ลำดับ" || cleanKey.includes("เลขทะเบียน") || cleanKey.includes("ทะเบียนรับ")) {
                         if (row[key] !== null && row[key] !== undefined && String(row[key]).trim() !== '') {
-                            receiveNoInput = row[key];
+                            receiveNoInput = sanitizeExcelVal(row[key]);
                             break;
                         }
                     }
@@ -231,7 +240,7 @@ exports.uploadExcelTasks = async (req, res) => {
                     const cleanKey = key.trim().replace(/\s+/g, '');
                     if (cleanKey === "ปีทะเบียน" || cleanKey === "ปี" || cleanKey === "ปีงบประมาณ" || cleanKey === "ปีพ.ศ." || cleanKey === "พ.ศ." || cleanKey === "ปีงบ" || cleanKey === "receive_year") {
                         if (row[key] !== null && row[key] !== undefined && String(row[key]).trim() !== '') {
-                            receiveYearInput = row[key];
+                            receiveYearInput = sanitizeExcelVal(row[key]);
                             break;
                         }
                     }
@@ -290,7 +299,7 @@ exports.uploadExcelTasks = async (req, res) => {
                     }
 
                     if (strVal && typeof strVal === 'string') {
-                        strVal = strVal.replace(/^'+/, '').trim();
+                        strVal = strVal.replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
                     }
 
                     // 1. จาก / ผู้ส่ง
@@ -391,8 +400,10 @@ exports.uploadExcelTasks = async (req, res) => {
 
                 const parsedDocs = parseAdditionalDocsText(excelAdditionalDocs);
 
-                const computedUrgency = excelUrgencyLevel || row["ชั้นความเร็ว"] || row["ระดับความเร่งด่วน"] || row["ความเร่งด่วน"] ? String(excelUrgencyLevel || row["ชั้นความเร็ว"] || row["ระดับความเร่งด่วน"] || row["ความเร่งด่วน"]).trim() : "ปกติ";
-                const computedSecret = excelSecretLevel || row["ชั้นความลับ"] || row["ความลับ"] ? String(excelSecretLevel || row["ชั้นความลับ"] || row["ความลับ"]).trim() : "ปกติ";
+                const rawUrgency = excelUrgencyLevel || row["ชั้นความเร็ว"] || row["ระดับความเร่งด่วน"] || row["ความเร่งด่วน"];
+                const rawSecret = excelSecretLevel || row["ชั้นความลับ"] || row["ความลับ"];
+                const computedUrgency = sanitizeExcelVal(rawUrgency) || "ปกติ";
+                const computedSecret = sanitizeExcelVal(rawSecret) || "ปกติ";
 
                 allData.push({
                     original_row: index + 1,
@@ -400,24 +411,24 @@ exports.uploadExcelTasks = async (req, res) => {
                     receive_no: receiveNo,
                     receive_year: receiveYear,
                     round: round,
-                    memo_no: excelMemoNo || (row["ที่หนังสือ"] ? String(row["ที่หนังสือ"]).trim() : null),
+                    memo_no: sanitizeExcelVal(excelMemoNo || row["ที่หนังสือ"]),
                     memo_date: formatDateTH(excelMemoDate || row["ลงวันที่"]),
-                    sender: excelSender || (row["จาก"] ? String(row["จาก"]).trim() : null),
-                    recipient_to: excelRecipientTo || (row["ถึง"] || row["เรียน"] ? String(row["ถึง"] || row["เรียน"]).trim() : null),
-                    additional_docs: excelAdditionalDocs || null,
+                    sender: sanitizeExcelVal(excelSender || row["จาก"]),
+                    recipient_to: sanitizeExcelVal(excelRecipientTo || row["ถึง"] || row["เรียน"]),
+                    additional_docs: sanitizeExcelVal(excelAdditionalDocs),
                     parsed_docs: parsedDocs,
-                    document_link: excelDocumentLink || null,
-                    title: subject || "ไม่มีชื่องาน",
-                    assignee_name: row["ผู้ปฏิบัติ"] ? String(row["ผู้ปฏิบัติ"]).trim() : null,
+                    document_link: sanitizeExcelVal(excelDocumentLink),
+                    title: sanitizeExcelVal(subject) || "ไม่มีชื่องาน",
+                    assignee_name: sanitizeExcelVal(row["ผู้ปฏิบัติ"]),
                     due_date_str: formatDateTH(dueDate),
-                    main_text: subject || null,
+                    main_text: sanitizeExcelVal(subject),
                     command_text: commandTopics, // Send array of topics
                     signed_date: formatDateTH(excelSignedDate || row["วันที่ลงนาม"]),
                     meeting_date: formatDateTH(excelMeetingDate || row["วันประชุม"]),
                     reply_due_date: formatDateTH(excelReplyDueDate || row["กำหนดส่งตอบรับ"]),
                     urgency_level: computedUrgency,
                     secret_level: computedSecret,
-                    notes: row["หมายเหตุ"] ? String(row["หมายเหตุ"]).trim() : null,
+                    notes: sanitizeExcelVal(row["หมายเหตุ"]),
                     is_urgent: computedUrgency !== "ปกติ" ? true : isUrgent,
                     raw_data: row
                 });
