@@ -35,6 +35,7 @@ export default function MemoForm() {
   const [users, setUsers] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [errors, setErrors] = useState<{ [key: string]: boolean }>({});
+  const [nextReceiveNoHint, setNextReceiveNoHint] = useState<number | null>(null);
   
   const [formData, setFormData] = useState({
     memo_no: "",
@@ -47,9 +48,9 @@ export default function MemoForm() {
     reply_due_date: "",
     main_text: "",
     task_detail: "",
-    is_urgent: true,
+    is_urgent: false,
     receive_no: "",
-    receive_date: "",
+    receive_date: new Date().toISOString().split('T')[0], // ค่าเริ่มต้นวันที่ปัจจุบัน
     sign_date: "",
     urgency_level: "ปกติ",
     secret_level: "ปกติ"
@@ -100,6 +101,25 @@ export default function MemoForm() {
       } catch (err) {}
     };
 
+    const fetchNextNo = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem("token") : "";
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5003";
+        const res = await fetch(`${backendUrl}/api/v1/tasks/next-reserve-no`, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.nextReceiveNo) {
+            setNextReceiveNoHint(data.nextReceiveNo);
+          }
+        }
+      } catch (err) {}
+    };
+
     const fetchMe = async () => {
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem("token") : "";
@@ -117,6 +137,7 @@ export default function MemoForm() {
 
     fetchUsers();
     fetchSuggestions();
+    fetchNextNo();
     fetchMe();
 
     // ตั้งค่าคน Login เป็น Default Checklist
@@ -129,10 +150,16 @@ export default function MemoForm() {
   const handleMainChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const isChecked = (e.target as HTMLInputElement).checked;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? isChecked : value,
-    }));
+    setFormData((prev) => {
+      const updated = {
+        ...prev,
+        [name]: type === "checkbox" ? isChecked : value,
+      };
+      if (name === "urgency_level") {
+        updated.is_urgent = value !== "ปกติ";
+      }
+      return updated;
+    });
 
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: false }));
@@ -429,7 +456,15 @@ export default function MemoForm() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold mb-1" style={{ color: "var(--header)" }}>เลขรับ (Receive No)</label>
-              <input type="number" name="receive_no" value={formData.receive_no} onChange={handleMainChange} placeholder="ถ้าไม่ระบุ ระบบจะรันเลขอัตโนมัติ" className="mt-1 block w-full h-11 px-3 rounded-md outline-none text-sm font-medium" style={{ border: "1px solid var(--wrapper)", backgroundColor: "var(--button)", color: "var(--foreground)" }}/>
+              <input 
+                type="number" 
+                name="receive_no" 
+                value={formData.receive_no} 
+                onChange={handleMainChange} 
+                placeholder={nextReceiveNoHint ? `เช่น ${nextReceiveNoHint} (ออโต้ลำดับถัดไป)` : "ถ้าไม่ระบุ ระบบจะรันเลขอัตโนมัติ"} 
+                className="mt-1 block w-full h-11 px-3 rounded-md outline-none text-sm font-medium" 
+                style={{ border: "1px solid var(--wrapper)", backgroundColor: "var(--button)", color: "var(--foreground)" }}
+              />
             </div>
             <div>
               <label className="block text-sm font-bold mb-1" style={{ color: "var(--header)" }}>วันที่รับ (จะบันทึกเป็นวันที่เข้าระบบ)</label>

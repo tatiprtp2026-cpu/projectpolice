@@ -135,10 +135,10 @@ const COLUMNS_AFTER_ASSIGNEE: { key: SortKey; label: string; className?: string 
   { key: 'urgency_level', label: 'ชั้นความเร็ว', className: 'w-[80px] text-center' },
   { key: 'status', label: 'สถานะ', className: 'w-[118px] text-center' },
   { key: 'secret_level', label: 'ชั้นความลับ', className: 'w-[75px] text-center' },
-  { key: 'memo_date', label: 'วันที่หนังสือ', className: 'w-[78px]' },
-  { key: 'meeting_date', label: 'วันประชุม', className: 'w-[78px]' },
-  { key: 'reply_due_date', label: 'กำหนดตอบกลับ', className: 'w-[82px]' },
-  { key: 'due_date', label: 'วันกำหนดส่ง', className: 'w-[82px]' },
+  { key: 'memo_date', label: 'วันที่หนังสือ', className: 'w-[95px]' },
+  { key: 'meeting_date', label: 'วันประชุม', className: 'w-[95px]' },
+  { key: 'reply_due_date', label: 'กำหนดตอบกลับ', className: 'w-[95px]' },
+  { key: 'due_date', label: 'วันกำหนดส่ง', className: 'w-[95px]' },
 ];
 
 const SortIcon: React.FC<{ active: boolean; direction: 'asc' | 'desc' }> = ({ active, direction }) => (
@@ -422,25 +422,25 @@ export const TaskTable: React.FC<TaskTableProps> = ({
                     </td>
 
                     <td className={`px-2 py-3 text-xs whitespace-nowrap overflow-hidden ${flagged ? 'text-[var(--redText)]' : 'text-[var(--foreground)]/70'}`}>
-                      <div className="truncate">
+                      <div className="whitespace-nowrap">
                         {formatDate(task.memo_date)}
                       </div>
                     </td>
 
                     <td className={`px-2 py-3 text-xs whitespace-nowrap overflow-hidden ${flagged ? 'text-[var(--redText)]' : 'text-[var(--foreground)]/70'}`}>
-                      <div className="truncate">
+                      <div className="whitespace-nowrap">
                         {task.meeting_date ? formatDate(task.meeting_date) : '-'}
                       </div>
                     </td>
 
                     <td className={`px-2 py-3 text-xs whitespace-nowrap overflow-hidden ${flagged ? 'text-[var(--redText)]' : 'text-[var(--foreground)]/70'}`}>
-                      <div className="truncate">
+                      <div className="whitespace-nowrap">
                         {task.reply_due_date ? formatDate(task.reply_due_date) : '-'}
                       </div>
                     </td>
 
                     <td className={`px-2 py-3 text-xs whitespace-nowrap overflow-hidden ${flagged ? 'text-[var(--redText)]' : 'text-[var(--foreground)]/70'}`}>
-                      <div className="truncate">
+                      <div className="whitespace-nowrap">
                         {task.due_date ? formatDate(task.due_date) : '-'}
                       </div>
                     </td>
