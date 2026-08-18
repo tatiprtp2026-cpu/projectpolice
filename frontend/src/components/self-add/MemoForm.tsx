@@ -48,7 +48,7 @@ export default function MemoForm() {
     reply_due_date: "",
     main_text: "",
     task_detail: "",
-    is_urgent: false,
+    is_urgent: true,
     receive_no: "",
     receive_date: new Date().toISOString().split('T')[0], // ค่าเริ่มต้นวันที่ปัจจุบัน
     sign_date: "",
@@ -150,16 +150,10 @@ export default function MemoForm() {
   const handleMainChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const isChecked = (e.target as HTMLInputElement).checked;
-    setFormData((prev) => {
-      const updated = {
-        ...prev,
-        [name]: type === "checkbox" ? isChecked : value,
-      };
-      if (name === "urgency_level") {
-        updated.is_urgent = value !== "ปกติ";
-      }
-      return updated;
-    });
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? isChecked : value,
+    }));
 
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: false }));
