@@ -823,7 +823,7 @@ exports.updateTaskDetail = async (req, res) => {
           }
         }
 
-        updateTaskInSheet(taskForSheet).catch(e => console.error("Sheet update error:", e.message));
+        await updateTaskInSheet(taskForSheet);
       }
     } catch (e) {
       console.error("Failed to prepare sheet/drive update", e);
@@ -1010,7 +1010,7 @@ exports.createTask = async (req, res) => {
     const { receiveNo, receiveYear, round } = await handleReceiveNoAndYear(client, req.body.receive_no, parsedReceiveDate);
 
     const existingRes = await client.query(
-        'SELECT id FROM tasks WHERE receive_no = $1 AND receive_year = $2 AND COALESCE(round, 1) = $3 LIMIT 1',
+        'SELECT id FROM tasks WHERE receive_no = $1 AND (receive_year = $2 OR receive_year = $2 - 543 OR receive_year = $2 + 543) AND COALESCE(round, 1) = $3 LIMIT 1',
         [receiveNo, receiveYear, round]
     );
     let taskId;
@@ -1018,7 +1018,25 @@ exports.createTask = async (req, res) => {
     if (existingRes.rows.length > 0) {
         taskId = existingRes.rows[0].id;
         await client.query(
-          `UPDATE tasks SET title = COALESCE(title, $1), memo_no = COALESCE(memo_no, $2), memo_date = COALESCE(memo_date, $3), main_text = COALESCE($4, main_text), due_date = COALESCE($5, due_date), is_urgent = COALESCE(is_urgent, $6), urgency_level = COALESCE(urgency_level, $7), secret_level = COALESCE(secret_level, $8), sign_date = COALESCE(sign_date, $9), meeting_date = COALESCE($10, meeting_date), reply_due_date = COALESCE($11, reply_due_date), sender = COALESCE(sender, $13), recipient_to = COALESCE(recipient_to, $14), additional_docs = COALESCE($15, additional_docs), round = COALESCE(round, $16), notes = COALESCE($17, notes), updated_at = NOW() WHERE id = $12`,
+          `UPDATE tasks SET 
+             title = $1, 
+             memo_no = $2, 
+             memo_date = $3, 
+             main_text = COALESCE($4, main_text), 
+             due_date = COALESCE($5, due_date), 
+             is_urgent = COALESCE($6, is_urgent), 
+             urgency_level = COALESCE($7, urgency_level), 
+             secret_level = COALESCE($8, secret_level), 
+             sign_date = COALESCE($9, sign_date), 
+             meeting_date = COALESCE($10, meeting_date), 
+             reply_due_date = COALESCE($11, reply_due_date), 
+             sender = $13, 
+             recipient_to = $14, 
+             additional_docs = COALESCE($15, additional_docs), 
+             round = COALESCE(round, $16), 
+             notes = COALESCE($17, notes), 
+             updated_at = NOW() 
+           WHERE id = $12`,
           [title || 'ไม่ระบุชื่อเรื่อง', memo_no, parsedMemoDate, main_text, finalDueDate, is_urgent, urgency_level, secret_level, parsedSignDate, parsedMeetingDate, parsedReplyDueDate, taskId, sender, recipient_to, additional_docs, round, notes]
         );
         await logTaskAction(client, taskId, validCreatorId, 'updated_task', { source: 'manual_create_upsert' });
@@ -1052,14 +1070,14 @@ exports.createTask = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // 🚀 ยิงข้อมูลขึ้น Google Sheets แบบไม่ต้องรอให้เสร็จ (Background task)
+    // 🚀 ยิงข้อมูลขึ้น Google Sheets และรอผลเพื่อไม่ให้ Serverless ตัดการทำงาน
     try {
         const fullTaskData = await fetchTaskDataForSheet(taskId);
         if (fullTaskData) {
             if (existingRes.rows.length > 0) {
-                updateTaskInSheet(fullTaskData).catch(err => console.error("[Google Sheets Update Sync error]", err.message));
+                await updateTaskInSheet(fullTaskData);
             } else {
-                appendTaskToSheet(fullTaskData).catch(err => console.error("[Google Sheets Append Sync error]", err.message));
+                await appendTaskToSheet(fullTaskData);
             }
         }
     } catch (e) {
@@ -1677,7 +1695,7 @@ exports.reserveTask = async (req, res) => {
 
     // Sync to Google Sheets
     try {
-        appendMultipleTasksToSheet(createdIds).catch(e => console.error("Batch Sheet Sync Error:", e.message));
+        await appendMultipleTasksToSheet(createdIds);
     } catch (e) {
         console.error("Failed to prepare batch sheet sync", e);
     }

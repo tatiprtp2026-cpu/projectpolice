@@ -151,6 +151,11 @@ const normalizeYear = (yearInput) => {
   return num < 2500 ? (num + 543) : num;
 };
 
+const isValidUUID = (uuid) => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return typeof uuid === 'string' && uuidRegex.test(uuid.trim());
+};
+
 const isMatchingRow = (row, taskData) => {
   if (!row || row.length === 0) return false;
 
@@ -166,13 +171,12 @@ const isMatchingRow = (row, taskData) => {
   const targetReceivedDate = taskData.created_at || taskData.received_date || '';
   const targetMemoNo = taskData.memo_no ? cleanCellText(taskData.memo_no) : '';
 
-  // 1. Strict ID match first (If both IDs exist, they MUST match exactly)
-  if (targetId && rowId) {
+  // 1. Strict ID match first (If both IDs are valid UUIDs, they MUST match exactly)
+  if (targetId && rowId && isValidUUID(targetId) && isValidUUID(rowId)) {
     if (targetId === rowId) {
       return true;
     }
-    // 🔒 Critical Fix: If both IDs exist and do not match, they belong to different DB records!
-    // Never overwrite a row that has a different database ID.
+    // If both are valid UUIDs and don't match, they belong to different records
     return false;
   }
 
