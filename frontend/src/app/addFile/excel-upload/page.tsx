@@ -93,6 +93,12 @@ export default function TaskExcelUploadPage() {
       return;
     }
 
+    const maxSingleSize = 4.2 * 1024 * 1024;
+    if (file.size > maxSingleSize) {
+      setError(`ไฟล์ "${file.name}" มีขนาดใหญ่เกินไป (${(file.size / (1024 * 1024)).toFixed(2)} MB) ซึ่งเกินขีดจำกัดของระบบ Serverless (4.2 MB) กรุณาลดขนาดไฟล์`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
