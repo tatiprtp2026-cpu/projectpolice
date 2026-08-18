@@ -1,6 +1,5 @@
 const { Pool } = require("pg");
 
-
 let connectionString = 
   process.env.projectpolice_POSTGRES_URL || 
   process.env.POSTGRES_URL || 

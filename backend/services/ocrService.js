@@ -77,7 +77,6 @@ function extractMeetingDate(text) {
 function parseThaiDateToCE(dateStr) {
   if (!dateStr) return null;
   let s = dateStr.trim();
-  s = s.replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
   
   // Clean all noise punctuation in dateStr to make token splitting clean
   s = s.replace(/[\`"'\-_\/\\~]/g, ' ').trim();

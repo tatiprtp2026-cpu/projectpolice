@@ -62,8 +62,7 @@ const parseThaiDateToIso = (dateStr) => {
     return null;
   }
   
-  let trimmed = dateStr.trim();
-  trimmed = trimmed.replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
+  const trimmed = dateStr.trim();
   if (!trimmed) return null;
 
   // Convert Thai numerals to Arabic numerals
@@ -235,18 +234,12 @@ const handleReceiveNoAndYear = async (client, inputReceiveNo, parsedReceiveDate)
     }
     
     let receiveNo = parseInt(receiveNoInput, 10) || null;
-    const { round, fiscalYear, fiscalYearBE } = calculateFiscalRoundAndYear(parsedReceiveDate);
-    let receiveYear = fiscalYearBE;
+    const { round, fiscalYear } = calculateFiscalRoundAndYear(parsedReceiveDate);
+    let receiveYear = fiscalYear;
 
     if (!receiveNo) {
-        // Generate new sequential number for this fiscal year and round across both BE/CE records
-        const res = await client.query(
-          `SELECT MAX(receive_no) as max_no 
-           FROM tasks 
-           WHERE (receive_year = $1 OR receive_year = $2 OR receive_year = $1 - 543 OR receive_year = $2 + 543)
-             AND COALESCE(round, 1) = $3`,
-          [fiscalYear, fiscalYearBE, round]
-        );
+        // Generate new sequential number for this fiscal year and round
+        const res = await client.query('SELECT MAX(receive_no) as max_no FROM tasks WHERE receive_year = $1 AND COALESCE(round, 1) = $2', [receiveYear, round]);
         receiveNo = (res.rows[0].max_no || 0) + 1;
     }
     return { receiveNo, receiveYear, round };
@@ -823,7 +816,7 @@ exports.updateTaskDetail = async (req, res) => {
           }
         }
 
-        await updateTaskInSheet(taskForSheet);
+        updateTaskInSheet(taskForSheet).catch(e => console.error("Sheet update error:", e.message));
       }
     } catch (e) {
       console.error("Failed to prepare sheet/drive update", e);
@@ -1010,7 +1003,7 @@ exports.createTask = async (req, res) => {
     const { receiveNo, receiveYear, round } = await handleReceiveNoAndYear(client, req.body.receive_no, parsedReceiveDate);
 
     const existingRes = await client.query(
-        'SELECT id FROM tasks WHERE receive_no = $1 AND (receive_year = $2 OR receive_year = $2 - 543 OR receive_year = $2 + 543) AND COALESCE(round, 1) = $3 LIMIT 1',
+        'SELECT id FROM tasks WHERE receive_no = $1 AND receive_year = $2 AND COALESCE(round, 1) = $3 LIMIT 1',
         [receiveNo, receiveYear, round]
     );
     let taskId;
@@ -1018,25 +1011,7 @@ exports.createTask = async (req, res) => {
     if (existingRes.rows.length > 0) {
         taskId = existingRes.rows[0].id;
         await client.query(
-          `UPDATE tasks SET 
-             title = $1, 
-             memo_no = $2, 
-             memo_date = $3, 
-             main_text = COALESCE($4, main_text), 
-             due_date = COALESCE($5, due_date), 
-             is_urgent = COALESCE($6, is_urgent), 
-             urgency_level = COALESCE($7, urgency_level), 
-             secret_level = COALESCE($8, secret_level), 
-             sign_date = COALESCE($9, sign_date), 
-             meeting_date = COALESCE($10, meeting_date), 
-             reply_due_date = COALESCE($11, reply_due_date), 
-             sender = $13, 
-             recipient_to = $14, 
-             additional_docs = COALESCE($15, additional_docs), 
-             round = COALESCE(round, $16), 
-             notes = COALESCE($17, notes), 
-             updated_at = NOW() 
-           WHERE id = $12`,
+          `UPDATE tasks SET title = COALESCE(title, $1), memo_no = COALESCE(memo_no, $2), memo_date = COALESCE(memo_date, $3), main_text = COALESCE($4, main_text), due_date = COALESCE($5, due_date), is_urgent = COALESCE(is_urgent, $6), urgency_level = COALESCE(urgency_level, $7), secret_level = COALESCE(secret_level, $8), sign_date = COALESCE(sign_date, $9), meeting_date = COALESCE($10, meeting_date), reply_due_date = COALESCE($11, reply_due_date), sender = COALESCE(sender, $13), recipient_to = COALESCE(recipient_to, $14), additional_docs = COALESCE($15, additional_docs), round = COALESCE(round, $16), notes = COALESCE($17, notes), updated_at = NOW() WHERE id = $12`,
           [title || 'ไม่ระบุชื่อเรื่อง', memo_no, parsedMemoDate, main_text, finalDueDate, is_urgent, urgency_level, secret_level, parsedSignDate, parsedMeetingDate, parsedReplyDueDate, taskId, sender, recipient_to, additional_docs, round, notes]
         );
         await logTaskAction(client, taskId, validCreatorId, 'updated_task', { source: 'manual_create_upsert' });
@@ -1070,14 +1045,14 @@ exports.createTask = async (req, res) => {
 
     await client.query('COMMIT');
 
-    // 🚀 ยิงข้อมูลขึ้น Google Sheets และรอผลเพื่อไม่ให้ Serverless ตัดการทำงาน
+    // 🚀 ยิงข้อมูลขึ้น Google Sheets แบบไม่ต้องรอให้เสร็จ (Background task)
     try {
         const fullTaskData = await fetchTaskDataForSheet(taskId);
         if (fullTaskData) {
             if (existingRes.rows.length > 0) {
-                await updateTaskInSheet(fullTaskData);
+                updateTaskInSheet(fullTaskData).catch(err => console.error("[Google Sheets Update Sync error]", err.message));
             } else {
-                await appendTaskToSheet(fullTaskData);
+                appendTaskToSheet(fullTaskData).catch(err => console.error("[Google Sheets Append Sync error]", err.message));
             }
         }
     } catch (e) {
@@ -1611,16 +1586,10 @@ exports.getNextReserveNo = async (req, res) => {
   const client = await pool.connect();
   try {
     const dateInput = req.query.date ? parseThaiDateToIso(req.query.date) : new Date();
-    const { round, fiscalYear, fiscalYearBE } = calculateFiscalRoundAndYear(dateInput);
-    const resCount = await client.query(
-      `SELECT MAX(receive_no) as max_no 
-       FROM tasks 
-       WHERE (receive_year = $1 OR receive_year = $2 OR receive_year = $1 - 543 OR receive_year = $2 + 543)
-         AND COALESCE(round, 1) = $3`,
-      [fiscalYear, fiscalYearBE, round]
-    );
+    const { round, fiscalYear } = calculateFiscalRoundAndYear(dateInput);
+    const resCount = await client.query('SELECT MAX(receive_no) as max_no FROM tasks WHERE receive_year = $1 AND COALESCE(round, 1) = $2', [fiscalYear, round]);
     const nextReceiveNo = (resCount.rows[0].max_no || 0) + 1;
-    res.status(200).json({ success: true, nextReceiveNo, currentYear: fiscalYearBE, round });
+    res.status(200).json({ success: true, nextReceiveNo, currentYear: fiscalYear, round });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server Error', error: err.message });
   } finally {
@@ -1635,7 +1604,7 @@ exports.reserveTask = async (req, res) => {
     
     let validCreatorId = req.user?.id || null;
     const dateInput = req.body.date ? parseThaiDateToIso(req.body.date) : new Date();
-    const { round, fiscalYear, fiscalYearBE } = calculateFiscalRoundAndYear(dateInput);
+    const { round, fiscalYear } = calculateFiscalRoundAndYear(dateInput);
     
     let { range } = req.body; 
     
@@ -1653,13 +1622,7 @@ exports.reserveTask = async (req, res) => {
         endNo = startNo;
       }
     } else {
-      const resCount = await client.query(
-        `SELECT MAX(receive_no) as max_no 
-         FROM tasks 
-         WHERE (receive_year = $1 OR receive_year = $2 OR receive_year = $1 - 543 OR receive_year = $2 + 543)
-           AND COALESCE(round, 1) = $3`,
-        [fiscalYear, fiscalYearBE, round]
-      );
+      const resCount = await client.query('SELECT MAX(receive_no) as max_no FROM tasks WHERE receive_year = $1 AND COALESCE(round, 1) = $2', [fiscalYear, round]);
       startNo = (resCount.rows[0].max_no || 0) + 1;
       endNo = startNo;
     }
@@ -1676,13 +1639,13 @@ exports.reserveTask = async (req, res) => {
       const taskRes = await client.query(
         `INSERT INTO tasks (title, status, created_by, receive_no, receive_year, round, due_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        ['กันเลขลงรับ', 'following', validCreatorId, i, fiscalYearBE, round, dueDate]
+        ['กันเลขลงรับ', 'following', validCreatorId, i, fiscalYear, round, dueDate]
       );
       const taskId = taskRes.rows[0].id;
       createdIds.push({
         id: taskId,
         receive_no: i,
-        receive_year: fiscalYearBE,
+        receive_year: fiscalYear,
         round: round,
         created_at: new Date(),
         title: 'กันเลขลงรับ',
@@ -1695,7 +1658,7 @@ exports.reserveTask = async (req, res) => {
 
     // Sync to Google Sheets
     try {
-        await appendMultipleTasksToSheet(createdIds);
+        appendMultipleTasksToSheet(createdIds).catch(e => console.error("Batch Sheet Sync Error:", e.message));
     } catch (e) {
         console.error("Failed to prepare batch sheet sync", e);
     }
@@ -1706,7 +1669,7 @@ exports.reserveTask = async (req, res) => {
       createdCount: createdIds.length,
       startNo, 
       endNo, 
-      receive_year: fiscalYearBE,
+      receive_year: fiscalYear,
       round
     });
   } catch (err) {

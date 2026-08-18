@@ -18,15 +18,6 @@ if (GOOGLE_REFRESH_TOKEN) {
   });
 }
 
-// 🔒 ฟังก์ชันแปลงข้อความทั่วไปสำหรับเซลล์ใน Google Sheets (รักษาข้อความและเครื่องหมายคำพูดในเนื้อหาไว้ตามปกติ)
-const cleanCellText = (val) => {
-  if (val === null || val === undefined) return '';
-  if (typeof val === 'number') return isNaN(val) ? '' : val;
-  if (typeof val === 'boolean') return val;
-  if (val instanceof Date) return formatDateTH(val);
-  return String(val).trim();
-};
-
 const cleanToOnlyName = (str) => {
   if (!str || typeof str !== 'string') return '';
   return str.split(',').map(item => {
@@ -41,8 +32,7 @@ const getSheetName = (yearAD) => {
   if (!yearAD) {
       return `${new Date().getFullYear() + 543}`;
   }
-  const cleanYear = String(yearAD).replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
-  const year = parseInt(cleanYear, 10);
+  const year = parseInt(yearAD, 10);
   return year > 2500 ? `${year}` : `${year + 543}`;
 };
 
@@ -64,8 +54,8 @@ async function ensureSheetExists(sheets, spreadsheetId, sheetName) {
           // 2. Add headers to the newly created sheet
           await sheets.spreadsheets.values.append({
               spreadsheetId,
-              range: `'${sheetName}'!A1:T1`,
-              valueInputOption: 'USER_ENTERED',
+              range: `${sheetName}!A1:T1`,
+              valueInputOption: 'RAW',
               resource: { values: [headers] }
           });
           console.log(`[Google Sheets] Added headers to new sheet: ${sheetName}`);
@@ -74,14 +64,14 @@ async function ensureSheetExists(sheets, spreadsheetId, sheetName) {
           try {
               const headerRes = await sheets.spreadsheets.values.get({
                   spreadsheetId,
-                  range: `'${sheetName}'!A1:T1`
+                  range: `${sheetName}!A1:T1`
               });
               const existingHeaders = (headerRes.data.values && headerRes.data.values[0]) || [];
               if (existingHeaders.length < headers.length || !existingHeaders.includes('วันประชุม')) {
                   await sheets.spreadsheets.values.update({
                       spreadsheetId,
-                      range: `'${sheetName}'!A1:T1`,
-                      valueInputOption: 'USER_ENTERED',
+                      range: `${sheetName}!A1:T1`,
+                      valueInputOption: 'RAW',
                       resource: { values: [headers] }
                   });
                   console.log(`[Google Sheets] Auto-updated header for sheet ${sheetName} to 20 columns.`);
@@ -97,7 +87,7 @@ async function ensureSheetExists(sheets, spreadsheetId, sheetName) {
 
 const normalizeDateString = (str) => {
   if (!str) return '';
-  let s = String(str).replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
+  let s = String(str).trim();
   if (!s) return '';
 
   if (s.includes('T')) {
@@ -138,45 +128,39 @@ const normalizeDateString = (str) => {
 
 const normalizeReceiveNo = (noInput) => {
   if (noInput === null || noInput === undefined || noInput === '') return '';
-  let s = String(noInput).replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
-  const num = parseInt(s.replace(/[๐-๙]/g, d => '0123456789'['๐๑๒๓๔๕๖๗๘๙'.indexOf(d)]), 10);
-  return isNaN(num) ? s : num;
+  const num = parseInt(String(noInput).replace(/[๐-๙]/g, d => '0123456789'['๐๑๒๓๔๕๖๗๘๙'.indexOf(d)]), 10);
+  return isNaN(num) ? String(noInput).trim() : num;
 };
 
 const normalizeYear = (yearInput) => {
   if (!yearInput) return '';
-  let s = String(yearInput).replace(/^[\s'"‘’`“”\\]+|[\s'"‘’`“”\\]+$/g, '').trim();
-  const num = parseInt(s.replace(/[๐-๙]/g, d => '0123456789'['๐๑๒๓๔๕๖๗๘๙'.indexOf(d)]), 10);
-  if (isNaN(num)) return s;
+  const num = parseInt(String(yearInput).replace(/[๐-๙]/g, d => '0123456789'['๐๑๒๓๔๕๖๗๘๙'.indexOf(d)]), 10);
+  if (isNaN(num)) return String(yearInput).trim();
   return num < 2500 ? (num + 543) : num;
-};
-
-const isValidUUID = (uuid) => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return typeof uuid === 'string' && uuidRegex.test(uuid.trim());
 };
 
 const isMatchingRow = (row, taskData) => {
   if (!row || row.length === 0) return false;
 
-  const rowId = row[0] ? cleanCellText(row[0]) : '';
-  const rowReceiveNo = row[1] ? String(normalizeReceiveNo(row[1])) : '';
-  const rowReceiveYear = String(normalizeYear(row[2]));
-  const rowReceivedDate = row[3] ? cleanCellText(row[3]) : '';
-  const rowMemoNo = row[4] ? cleanCellText(row[4]) : '';
+  const rowId = row[0] ? String(row[0]).trim() : '';
+  const rowReceiveNo = row[1] ? String(row[1]).trim() : '';
+  const rowReceiveYear = normalizeYear(row[2]);
+  const rowReceivedDate = row[3] ? String(row[3]).trim() : '';
+  const rowMemoNo = row[4] ? String(row[4]).trim() : '';
 
-  const targetId = taskData.id ? cleanCellText(taskData.id) : '';
-  const targetReceiveNo = taskData.receive_no ? String(normalizeReceiveNo(taskData.receive_no)) : '';
-  const targetReceiveYear = String(normalizeYear(taskData.receive_year));
+  const targetId = taskData.id ? String(taskData.id).trim() : '';
+  const targetReceiveNo = taskData.receive_no ? String(taskData.receive_no).trim() : '';
+  const targetReceiveYear = normalizeYear(taskData.receive_year);
   const targetReceivedDate = taskData.created_at || taskData.received_date || '';
-  const targetMemoNo = taskData.memo_no ? cleanCellText(taskData.memo_no) : '';
+  const targetMemoNo = taskData.memo_no ? String(taskData.memo_no).trim() : '';
 
-  // 1. Strict ID match first (If both IDs are valid UUIDs, they MUST match exactly)
-  if (targetId && rowId && isValidUUID(targetId) && isValidUUID(rowId)) {
+  // 1. Strict ID match first (If both IDs exist, they MUST match exactly)
+  if (targetId && rowId) {
     if (targetId === rowId) {
       return true;
     }
-    // If both are valid UUIDs and don't match, they belong to different records
+    // 🔒 Critical Fix: If both IDs exist and do not match, they belong to different DB records!
+    // Never overwrite a row that has a different database ID.
     return false;
   }
 
@@ -222,26 +206,26 @@ const isMatchingRow = (row, taskData) => {
 };
 
 const buildRowData = (taskData) => [
-  cleanCellText(taskData.id),
+  taskData.id || '',
   normalizeReceiveNo(taskData.receive_no),
   normalizeYear(taskData.receive_year),
   formatDateTH(taskData.created_at || taskData.received_date) || '',
-  cleanCellText(taskData.memo_no),
+  taskData.memo_no || '',
   formatDateTH(taskData.memo_date) || '',
-  cleanCellText(taskData.sender),
-  cleanCellText(taskData.recipient_to),
-  cleanCellText(taskData.title),
+  taskData.sender || '',
+  taskData.recipient_to || '',
+  taskData.title || '',
   cleanToOnlyName(taskData.personInCharge) || '',
   formatDateTH(taskData.due_date) || '',
-  cleanCellText(taskData.task_detail),
+  taskData.task_detail || '',
   formatDateTH(taskData.sign_date) || '',
   formatDateTH(taskData.meeting_date) || '',
   formatDateTH(taskData.reply_due_date) || '',
-  cleanCellText(taskData.notes),
-  cleanCellText(taskData.additional_docs),
-  cleanCellText(taskData.urgency_level || 'ปกติ'),
-  cleanCellText(taskData.secret_level || 'ปกติ'),
-  cleanCellText(taskData.document_link || taskData.drive_web_view_link)
+  taskData.notes || '',
+  taskData.additional_docs || '',
+  taskData.urgency_level || 'ปกติ',
+  taskData.secret_level || 'ปกติ',
+  taskData.document_link || taskData.drive_web_view_link || ''
 ];
 
 // Function to append or update a single task in Google Sheets
@@ -261,7 +245,7 @@ exports.appendTaskToSheet = async (taskData) => {
     try {
       const getRes = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `'${sheetName}'!A:T`,
+        range: `${sheetName}!A:T`,
       });
       rows = getRes.data.values || [];
     } catch (e) {
@@ -276,8 +260,8 @@ exports.appendTaskToSheet = async (taskData) => {
       const sheetRowNumber = rowIndex + 1;
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `'${sheetName}'!A${sheetRowNumber}:T${sheetRowNumber}`,
-        valueInputOption: 'USER_ENTERED',
+        range: `${sheetName}!A${sheetRowNumber}:T${sheetRowNumber}`,
+        valueInputOption: 'RAW',
         resource: {
           values: [rowData],
         },
@@ -287,8 +271,8 @@ exports.appendTaskToSheet = async (taskData) => {
       // Append new row
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `'${sheetName}'!A:T`,
-        valueInputOption: 'USER_ENTERED',
+        range: `${sheetName}!A:T`,
+        valueInputOption: 'RAW',
         resource: {
           values: [rowData],
         },
@@ -320,7 +304,7 @@ exports.appendMultipleTasksToSheet = async (tasksArray) => {
         try {
           const getRes = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `'${sheetName}'!A:T`,
+            range: `${sheetName}!A:T`,
           });
           existingRows = getRes.data.values || [];
         } catch (e) {
@@ -337,7 +321,7 @@ exports.appendMultipleTasksToSheet = async (tasksArray) => {
           if (rowIndex !== -1) {
             const sheetRowNumber = rowIndex + 1;
             updateData.push({
-              range: `'${sheetName}'!A${sheetRowNumber}:T${sheetRowNumber}`,
+              range: `${sheetName}!A${sheetRowNumber}:T${sheetRowNumber}`,
               values: [rowData]
             });
             existingRows[rowIndex] = rowData;
@@ -350,7 +334,7 @@ exports.appendMultipleTasksToSheet = async (tasksArray) => {
           await sheets.spreadsheets.values.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
             resource: {
-              valueInputOption: 'USER_ENTERED',
+              valueInputOption: 'RAW',
               data: updateData
             }
           });
@@ -359,8 +343,8 @@ exports.appendMultipleTasksToSheet = async (tasksArray) => {
         if (rowsToAppend.length > 0) {
           await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: `'${sheetName}'!A:T`,
-            valueInputOption: 'USER_ENTERED',
+            range: `${sheetName}!A:T`,
+            valueInputOption: 'RAW',
             resource: { values: rowsToAppend },
           });
         }
@@ -384,7 +368,7 @@ exports.updateTaskInSheet = async (taskData) => {
     try {
         getRes = await sheets.spreadsheets.values.get({
           spreadsheetId: SPREADSHEET_ID,
-          range: `'${sheetName}'!A:T`, 
+          range: `${sheetName}!A:T`, 
         });
     } catch (err) {
         console.warn(`[Google Sheets] Could not read sheet ${sheetName}. It might not exist.`);
@@ -407,8 +391,8 @@ exports.updateTaskInSheet = async (taskData) => {
 
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `'${sheetName}'!A${sheetRowNumber}:T${sheetRowNumber}`,
-      valueInputOption: 'USER_ENTERED',
+      range: `${sheetName}!A${sheetRowNumber}:T${sheetRowNumber}`,
+      valueInputOption: 'RAW',
       resource: {
         values: [rowData],
       },
@@ -435,7 +419,7 @@ exports.deleteTaskFromSheet = async (taskId, receiveYear, receiveNo = '') => {
 
     const getRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `'${sheetName}'!A:T`,
+      range: `${sheetName}!A:T`,
     });
 
     const rows = getRes.data.values;
@@ -483,7 +467,7 @@ exports.clearTaskLinksInSheet = async (taskId, receiveYear, receiveNo = '') => {
     try {
       getRes = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `'${sheetName}'!A:T`,
+        range: `${sheetName}!A:T`,
       });
     } catch (err) {
       console.warn(`[Google Sheets] Could not read sheet ${sheetName}`);
@@ -507,10 +491,10 @@ exports.clearTaskLinksInSheet = async (taskId, receiveYear, receiveNo = '') => {
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
       resource: {
-        valueInputOption: 'USER_ENTERED',
+        valueInputOption: 'RAW',
         data: [
-          { range: `'${sheetName}'!Q${sheetRowNumber}`, values: [['']] },
-          { range: `'${sheetName}'!T${sheetRowNumber}`, values: [['']] }
+          { range: `${sheetName}!Q${sheetRowNumber}`, values: [['']] },
+          { range: `${sheetName}!T${sheetRowNumber}`, values: [['']] }
         ]
       }
     });

@@ -78,18 +78,6 @@ export default function FileUploader({ setExtractedData, progress, setProgress }
         try {
             for (let i = 0; i < totalFiles; i++) {
                 const currentFile = files[i];
-
-                // 🔒 ตรวจสอบขนาดไฟล์เดี่ยว ไม่ให้เกิน 4.2 MB เพื่อรองรับ Vercel Serverless Function limit
-                const maxSingleSize = 4.2 * 1024 * 1024;
-                if (currentFile.size > maxSingleSize) {
-                    allResults.push({
-                        filename: currentFile.name,
-                        status: "error",
-                        error: `ขนาดไฟล์ (${(currentFile.size / (1024 * 1024)).toFixed(2)} MB) เกินขีดจำกัดของระบบ Serverless (4.2 MB)`
-                    });
-                    continue;
-                }
-
                 setMessage({ 
                     text: `กำลังให้ AI ประมวลผลไฟล์ที่ ${i + 1}/${totalFiles} (${currentFile.name})...`, 
                     type: "success" 

@@ -125,14 +125,7 @@ app.get("/", (req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error("Global Error Handler:", err);
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin");
-  }
-  const status = err.status || (err.name === "MulterError" ? 400 : 500);
+  const status = err.status || 500;
   res.status(status).json({
     success: false,
     message: err.message || "Internal Server Error",

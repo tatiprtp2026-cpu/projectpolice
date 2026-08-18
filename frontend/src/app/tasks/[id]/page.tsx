@@ -522,20 +522,6 @@ export default function TaskDetailPage() {
         const file = e.target.files?.[0];
         if (!file || !id) return;
 
-        // 🔒 ตรวจสอบขนาดไฟล์เดี่ยว ไม่ให้เกิน 4.2 MB เพื่อรองรับ Vercel Serverless Function limit
-        const maxSingleSize = 4.2 * 1024 * 1024;
-        if (file.size > maxSingleSize) {
-            Swal.fire({
-                icon: "warning",
-                title: "ขนาดไฟล์เกินกำหนด (สูงสุด 4.2 MB)",
-                html: `ไฟล์ <b>"${file.name}"</b> มีขนาด ${(file.size / (1024 * 1024)).toFixed(2)} MB ซึ่งเกินขีดจำกัดของระบบ Serverless (4.2 MB)<br/><br/>กรุณาลดขนาดไฟล์ก่อนอัปโหลด`,
-                confirmButtonText: "ตกลง",
-                confirmButtonColor: "#2563eb",
-            });
-            if (e.target) e.target.value = "";
-            return;
-        }
-
         const confirm = await Swal.fire({
             title: "ยืนยันการอัปโหลดข้อมูลทับ?",
             html: `คุณกำลังเลือกไฟล์ <b>"${file.name}"</b> เพื่ออัปโหลดทับเอกสารเดิม<br/><br/><span style="font-size: 0.85rem; color: #d97706;">⚠️ AI จะอ่านสกัดข้อมูลจากไฟล์ใหม่นี้ และอัปเดตข้อมูลหัวข้อ/เลขที่/สาระสำคัญทับข้อมูลเดิม</span>`,
@@ -635,22 +621,6 @@ export default function TaskDetailPage() {
             return;
         }
 
-        // 🔒 ตรวจสอบขนาดไฟล์เดี่ยว ไม่ให้เกิน 4.2 MB เพื่อรองรับ Vercel Serverless Function limit
-        const maxSingleSize = 4.2 * 1024 * 1024;
-        const oversizedFiles = files.filter(f => f.size > maxSingleSize);
-        if (oversizedFiles.length > 0) {
-            const oversizedNames = oversizedFiles.map(f => `• <b>${f.name}</b> (${(f.size / (1024 * 1024)).toFixed(2)} MB)`).join("<br/>");
-            Swal.fire({
-                icon: "warning",
-                title: "ขนาดไฟล์เกินกำหนด (สูงสุด 4.2 MB ต่อไฟล์)",
-                html: `ไฟล์ต่อไปนี้มีขนาดใหญ่เกินกว่าที่ระบบ Serverless รองรับ (4.2 MB):<br/><br/><div style="color:#d97706; text-align:left; font-size:0.88rem; background:rgba(217,119,6,0.08); padding:10px; border-radius:8px; border:1px solid rgba(217,119,6,0.2);">${oversizedNames}</div><br/>กรุณาลดขนาดไฟล์หรือบีบอัดไฟล์ก่อนอัปโหลด`,
-                confirmButtonText: "ตกลง",
-                confirmButtonColor: "#2563eb",
-            });
-            if (e.target) e.target.value = "";
-            return;
-        }
-
         let htmlContent = `
             <div style="text-align: left; font-size: 0.88rem; max-height: 350px; overflow-y: auto; padding: 4px;">
                 <p style="margin-bottom: 12px; opacity: 0.8; font-weight: 500;">
@@ -702,66 +672,24 @@ export default function TaskDetailPage() {
         const notesArray = confirm.value as string[];
 
         setUploadingDoc(true);
-        Swal.fire({
-            title: `กำลังอัปโหลดเอกสารแนบ (0/${files.length})...`,
-            text: "ระบบกำลังอัปโหลดไฟล์ขึ้น Google Drive และบันทึกข้อมูล กรุณารอสักครู่",
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-
         try {
+            const formData = new FormData();
+            files.forEach((f) => formData.append("files", f));
+            formData.append("notes", JSON.stringify(notesArray));
+
             const token = getToken();
-            let successCount = 0;
-            const errors: string[] = [];
-
-            // 🚀 อัปโหลดแบบแยกทีละไฟล์ (Sequential Upload) เพื่อไม่ให้ขนาด Request รวมเกิน 4.5 MB ของ Vercel
-            for (let i = 0; i < files.length; i++) {
-                const f = files[i];
-                Swal.update({
-                    title: `กำลังอัปโหลดเอกสารแนบ (${i + 1}/${files.length})...`,
-                    text: `กำลังประมวลผลไฟล์: ${f.name}`
-                });
-
-                const formData = new FormData();
-                formData.append("files", f);
-                formData.append("notes", JSON.stringify([notesArray[i] || ""]));
-
-                const res = await fetch(`${backendUrl}/api/v1/tasks/${id}/attach-doc`, {
-                    method: "POST",
-                    headers: token ? { Authorization: `Bearer ${token}` } : {},
-                    body: formData,
-                });
-
-                const data = await res.json().catch(() => null);
-                if (res.ok && data?.success) {
-                    successCount++;
-                } else {
-                    const errorMsg = data?.message || `ไฟล์ "${f.name}" อัปโหลดไม่สำเร็จ`;
-                    errors.push(errorMsg);
-                }
-            }
-
-            if (successCount === files.length) {
-                Swal.fire({ 
-                    icon: "success", 
-                    title: `อัปโหลดเอกสารสำเร็จ (${successCount}/${files.length} รายการ)`, 
-                    timer: 2000, 
-                    showConfirmButton: false 
-                });
-                fetchTask();
-            } else if (successCount > 0) {
-                Swal.fire({
-                    icon: "warning",
-                    title: `อัปโหลดสำเร็จ ${successCount}/${files.length} รายการ`,
-                    html: `มีบางไฟล์ที่อัปโหลดไม่สำเร็จ:<br/><br/><div style="color:#d97706; text-align:left; font-size:0.85rem;">• ${errors.join("<br/>• ")}</div>`,
-                });
+            const res = await fetch(`${backendUrl}/api/v1/tasks/${id}/attach-doc`, {
+                method: "POST",
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                body: formData,
+            });
+            const data = await res.json().catch(() => null);
+            if (res.ok && data?.success) {
+                Swal.fire({ icon: "success", title: "อัปโหลดเอกสารเพิ่มเติมสำเร็จ", timer: 2000, showConfirmButton: false });
                 fetchTask();
             } else {
-                const errorMsg = errors.join("<br/>") || "ไม่สามารถอัปโหลดเอกสารเพิ่มเติมได้ กรุณาลองใหม่อีกครั้ง";
-                Swal.fire({ icon: "error", title: "ไม่สามารถอัปโหลดได้", html: errorMsg });
+                const errorMsg = data?.message || "ไม่สามารถอัปโหลดเอกสารเพิ่มเติมได้ กรุณาลองใหม่อีกครั้ง";
+                Swal.fire({ icon: "warning", title: "ไม่สามารถอัปโหลดได้", text: errorMsg });
             }
         } catch (err: any) {
             console.error("Attach doc error:", err);
